@@ -455,9 +455,10 @@ async function doLogin(){
     snap.forEach(child => { profile = { uid: child.key, ...child.val() }; });
     if (!profile || profile.password !== pass) { showErr('Contraseña incorrecta.'); btn.disabled=false; btn.textContent='Entrar al Portal'; return; }
     if (profile.active === false) { showErr('Cuenta desactivada.'); btn.disabled=false; btn.textContent='Entrar al Portal'; return; }
-    currentUser = { uid: profile.uid };
-    groupId    = profile.group_id;
-    clientName = profile.name || profile.username;
+    currentUser   = { uid: profile.uid };
+    groupId       = profile.group_id;
+    clientDevices = profile.devices ? Object.values(profile.devices) : null;
+    clientName    = profile.name || profile.username;
     document.getElementById('client-name').textContent = clientName;
     showApp(); initMap(); setDefaultDates(); loadUnits(); startPolling(); listenChat();
   } catch(e) {
@@ -469,7 +470,7 @@ function showErr(msg){const el=document.getElementById('login-error');el.textCon
 function doLogout(){
   if(pollTimer) clearInterval(pollTimer);
   if(woxSocket) { woxSocket.disconnect(); woxSocket=null; }
-  currentUser=null; groupId=null; clientName=null;
+  currentUser=null; groupId=null; clientName=null; clientDevices=null;
   allUnits=[]; allAlerts=[];
   document.getElementById('login-user').value='';
   document.getElementById('login-pass').value='';
@@ -539,12 +540,15 @@ async function woxGet(endpoint){
 }
 async function loadUnits(){
   try {
-    // Si groupId es 0 o null carga todos, sino filtra por grupo
-    const gParam = (groupId && groupId !== 0) ? `&group_id=${groupId}` : '';
-    const r = await fetch(`${WOX_BASE}/api/devices?user_api_hash=${encodeURIComponent(WOX_HASH)}${gParam}`);
+    const r = await fetch(`${WOX_BASE}/api/devices?user_api_hash=${encodeURIComponent(WOX_HASH)}`);
     const data = await r.json();
     if (data.status === 1) {
-      allUnits = data.data || [];
+      let units = data.data || [];
+      // Filtrar por lista de devices si el cliente tiene asignados
+      if (clientDevices && clientDevices.length > 0) {
+        units = units.filter(u => clientDevices.includes(u.id));
+      }
+      allUnits = units;
       updateMapMarkers();
       renderUnits();
       updateCounters();
